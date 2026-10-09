@@ -1,0 +1,224 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+enum Role {
+  ADMIN
+  NURSE
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         Role
+  createdAt    DateTime @default(now())
+  notes        Note[]
+}
+
+model Patient {
+  id        String     @id @default(cuid())
+  fullName  String
+  dob       DateTime?
+  mrn       String?    @unique
+  createdAt DateTime   @default(now())
+  notes     Note[]
+  documents Document[]
+}
+
+enum NoteKind {
+  TEXT
+  IMAGE
+  DOCUMENT
+  MIXED
+}
+
+enum VisionStatus {
+  NONE
+  PENDING
+  DONE
+  FAILED
+}
+
+model Note {
+  id               String       @id @default(cuid())
+  patientId        String
+  patient          Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  authorId         String
+  author           User         @relation(fields: [authorId], references: [id])
+  kind             NoteKind
+  text             String?
+  imagePath        String?
+  imageDescription String?
+  visionStatus     VisionStatus @default(NONE)
+  documentPath     String?
+  documentText     String?
+  createdAt        DateTime     @default(now())
+
+  @@index([patientId, createdAt])
+}
+
+enum DocumentStatus {
+  PENDING
+  INGESTING
+  READY
+  FAILED
+}
+
+enum DocumentKind {
+  LIBRARY
+  OASIS
+}
+
+model Document {
+  id                  String               @id @default(cuid())
+  filename            String               @unique
+  storagePath         String
+  uploadedAt          DateTime             @default(now())
+  uploadedById        String?
+  status              DocumentStatus       @default(PENDING)
+  kind                DocumentKind         @default(LIBRARY)
+  patientId           String?
+  patient             Patient?             @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  errorMessage        String?
+  textChunks          Int                  @default(0)
+  tableChunks         Int                  @default(0)
+  imageChunks         Int                  @default(0)
+  oasisAnswers        OasisAnswer[]
+  oasisContradictions OasisContradiction[]
+  qaResults           QaResult[]
+
+  @@index([patientId])
+}
+
+enum OasisAnswerStatus {
+  PENDING
+  DONE
+  FAILED
+}
+
+model OasisAnswer {
+  id         String            @id @default(cuid())
+  documentId String
+  document   Document          @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  page       Int
+  question   String
+  answer     String?
+  notFound   Boolean           @default(false)
+  citations  String            @default("[]")
+  status     OasisAnswerStatus @default(PENDING)
+  createdAt  DateTime          @default(now())
+
+  @@index([documentId, page])
+}
+
+model OasisContradiction {
+  id          String   @id @default(cuid())
+  documentId  String
+  document    Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  questionA   String
+  questionB   String
+  explanation String
+  createdAt   DateTime @default(now())
+
+  @@index([documentId])
+}
+
+enum QaVerdict {
+  PASS
+  FAIL
+  UNSURE
+}
+
+model QaPreset {
+  id             String   @id @default(cuid())
+  question       String
+  expectedAnswer String
+  order          Int      @default(0)
+  createdAt      DateTime @default(now())
+
+  @@index([order])
+}
+
+model QaResult {
+  id             String    @id @default(cuid())
+  documentId     String
+  document       Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  question       String
+  expectedAnswer String
+  actualAnswer   String?
+  verdict        QaVerdict
+  reasoning      String?
+  citations      String    @default("[]")
+  createdAt      DateTime  @default(now())
+
+  @@index([documentId])
+}
+
+model PresetQuestion {
+  id        String   @id @default(cuid())
+  text      String
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([order])
+}
+
+model TrendPresetQuestion {
+  id        String   @id @default(cuid())
+  text      String
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([order])
+}
+
+model Settings {
+  id           String  @id @default("singleton")
+  responseTone String?
+}
+
+enum DeviceStatus {
+  PENDING
+  ACTIVE
+  REVOKED
+}
+
+enum DeviceKind {
+  PHONE
+  BROWSER
+}
+
+model Device {
+  id     String       @id @default(cuid())
+  label  String
+  kind   DeviceKind   @default(PHONE)
+  status DeviceStatus @default(PENDING)
+
+  // PHONE fields
+  totpSecret   String?
+  lastUsedStep Int? // last accepted TOTP time-step; blocks replaying an already-used code
+  platform     String?
+  model        String?
+  osVersion    String?
+
+  // BROWSER fields
+  cookieSecretHash String?  @unique
+  userAgent        String?
+  linkedPhoneId    String?
+  linkedPhone      Device?  @relation("PhoneBrowsers", fields: [linkedPhoneId], references: [id])
+  linkedBrowsers   Device[] @relation("PhoneBrowsers")
+
+  // shared pairing lifecycle
+  pairingToken     String?   @unique
+  pairingExpiresAt DateTime?
+  pairedAt         DateTime?
+  lastUsedAt       DateTime?
+  createdAt        DateTime  @default(now())
+}

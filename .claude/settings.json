@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.venv/bin/python -c ' *)",
+      "Bash(pkill -f \"uvicorn api.main:app\")",
+      "Bash(curl -s -X POST http://localhost:8010/ask -H 'Content-Type: application/json' -d '{ *)"
+    ]
+  }
+}
